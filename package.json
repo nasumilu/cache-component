@@ -1,0 +1,27 @@
+{
+  "name": "@nasumilu/cache-componenet",
+  "version": "1.0.0",
+  "description": "A simple caching paradigm inspired by PSR-6.",
+  "scripts": {
+    "build": "tsc --project ./tsconfig.json",
+    "test": "jasmine --config=jasmine.json",
+    "test:fancy": "jasmine --reporter=jasmine-console-reporter --config=jasmine.json",
+    "lint": "eslint . --ext .ts"
+  },
+  "keywords": [],
+  "author": "Michael Lucas <nasumilu@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/jasmine": "^4.3.0",
+    "@types/node": "^18.11.9",
+    "@typescript-eslint/parser": "^5.43.0",
+    "eslint": "^8.22.0",
+    "jasmine": "^4.5.0",
+    "jasmine-console-reporter": "^3.1.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^4.9.3"
+  },
+  "peerDependencies": {
+    "fs": "^0.0.1-security"
+  }
+}
