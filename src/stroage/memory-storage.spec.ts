@@ -1,21 +1,18 @@
 import 'jasmine';
-import {FilesystemStorage} from "./filesystem-storage";
+import {MemoryStorage} from "./memory-storage";
 
-describe('Filesystem Storage Class', () => {
+describe('Memory Storage Class', () => {
+
     let storage: Storage;
     const key = 'my-key';
 
-    beforeEach(() => {
-        storage = new FilesystemStorage('/tmp/test');
-        storage.clear();
-    });
+    beforeEach(() => storage = new MemoryStorage());
     afterEach(() => storage = null);
 
     it('Get an instance and check its default state (empty).', () => {
         expect(storage).toBeTruthy();
         expect(storage.length).toEqual(0);
     });
-
     it(
         `Store a value with key ${key}, check the value equality, and the storage length`, () => {
             const expected = 'my-value';
@@ -48,4 +45,6 @@ describe('Filesystem Storage Class', () => {
         expect(storage.getItem(key)).toBeNull();
 
     });
+
+
 });
