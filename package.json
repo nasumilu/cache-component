@@ -23,5 +23,6 @@
   },
   "peerDependencies": {
     "fs": "^0.0.1-security"
-  }
+  },
+  "repository": "github:nasumilu/cache-componenet"
 }
