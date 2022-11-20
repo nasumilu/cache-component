@@ -1,8 +1,9 @@
+import {MemoryStorage} from "./storage/memory-storage";
+
+
 /**
  * The ItemInterface provides the necessary properties for the CachePool to successfully cache some value<T>.
  */
-import {MapStorage} from "./map-storage";
-
 export interface ItemInterface<T> {
 
     /**
@@ -46,36 +47,29 @@ export class CacheItem<T> implements ItemInterface<T> {
      * The actual cached value.
      * @private
      */
-    #value: T = null;
+    value: T = null;
     /**
      * The item's TTL in seconds
      * @private
      */
-    #expiry?: number;
+    expiry: number = Infinity;
 
     set expiresAfter(value: number | null) {
         if (null != value) {
-            this.#expiry = (new Date()).getSeconds() + value;
+            this.expiry = (new Date()).getTime() + value;
         }
     }
 
     set expiresAt(value: Date | null) {
-        if(null !== value) {
-            this.#expiry = value.getSeconds();
+        if (null !== value) {
+            this.expiry = value.getSeconds();
         }
     }
 
     get hit(): boolean {
-        return (this.#expiry ?? Infinity) > (new Date()).getSeconds();
+        return (new Date()).getTime() < this.expiry;
     }
 
-    get value(): T {
-        return this.#value;
-    }
-
-    set value(value: T) {
-        this.#value = value;
-    }
 }
 
 /**
@@ -101,7 +95,7 @@ export interface CachePoolInterface {
      *
      * @param key
      */
-    delete<T>(key: string): void ;
+    delete<T>(key: string): void;
 
     /**
      * Indicates that a cache item exists for a key.
@@ -129,11 +123,11 @@ export class CachePool implements CachePoolInterface {
     readonly #storage: Storage;
 
     /**
-     * Constructs a NamedCachePool
+     * Constructs a CachePool
      * @param storage
      */
     constructor(storage?: Storage) {
-        this.#storage = storage ?? new MapStorage();
+        this.#storage = storage ?? new MemoryStorage();
     }
 
     /**
@@ -155,13 +149,13 @@ export class CachePool implements CachePoolInterface {
      * @param key The key used to store the CachedItem
      * @private
      */
-    #getItem<T>(key: string): ItemInterface<T> {
-        return JSON.parse(this.#storage.getItem(key) ??  null) as ItemInterface<T>;
+    #getItem?<T>(key: string): ItemInterface<T> {
+        return JSON.parse(this.#storage.getItem(key) ?? null) as ItemInterface<T>;
     }
 
     get<T>(key: string, fn: CacheFn<T>): T {
         let item = this.#getItem<T>(key);
-        if (null == item || !item.hit) {
+        if (!item?.hit) {
             item = this.#initItem<T>(key, fn);
         }
         return item.value;
@@ -219,18 +213,12 @@ export class NamespaceCachePool extends CachePool implements NamespaceCachePoolI
     readonly #namespace: string;
 
     /**
-     * Storage used to cache items.
-     * @private
-     */
-    readonly #storage: Storage;
-
-    /**
      * Constructs a NamedCachePool
      * @param namespace the namespace for the
      * @param storage
      */
     constructor(namespace: string, storage?: Storage) {
-        super(storage ?? new MapStorage());
+        super(storage ?? new MemoryStorage());
         this.#namespace = namespace;
     }
 
@@ -253,17 +241,6 @@ export class NamespaceCachePool extends CachePool implements NamespaceCachePoolI
     has(key: string): boolean {
         return super.has(this.#getNamespaceKey(key));
     }
-
-    clear(): void {
-        let keys: string[] = [];
-        for(let i = 0; i<this.#storage.length; i++) {
-            const key = this.#storage.key(i);
-            if (null != key && key.includes(this.#namespace)) {
-                keys.push(key);
-            }
-        }
-        keys.forEach(key => this.#storage.removeItem(key));
-    }
 }
 
 /**
@@ -274,7 +251,7 @@ export class NamespaceCachePool extends CachePool implements NamespaceCachePoolI
  * const cache = new ChainedCachePool(
  *          new NamespaceCachePool('session-storage', window.sessionStorage),
  *          new NamespaceCachePool('local-storage', window.localStorage),
- *          new NamespaceCachePool('memory'), // default is MapStorage which is in-memory
+ *          new NamespaceCachePool('memory'), // default is MemoryStorage which is in-memory
  *          new NamespaceCachePool('fs-storage', new FilesystemStorage('/tmp/cache'))
  *      )
  *  );

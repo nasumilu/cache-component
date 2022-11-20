@@ -1,8 +1,6 @@
 import 'jasmine';
-import {NamespaceCachePool, CacheItem, ItemInterface, NamespaceCachePoolInterface, ChainedCachePool} from './cache';
-import {FilesystemStorage} from "./filesystem-storage";
-import {readdirSync, unlinkSync} from "fs";
-import {join as joinPath} from 'path';
+import {CacheItem, ChainedCachePool, ItemInterface, NamespaceCachePool, NamespaceCachePoolInterface} from "./cache";
+import arrayWithExactContents = jasmine.arrayWithExactContents;
 
 describe('CacheItem Class', () => {
     let item: ItemInterface<string> = null;
@@ -91,24 +89,27 @@ describe('NamespaceCachePool Class', () => {
 
 describe('ChainedCachePool Class', () => {
     let cache: ChainedCachePool;
-    const memory = 'memory';
-    const fs = 'fs';
-    const path = '/tmp/cache'
-    beforeEach(() => cache = new ChainedCachePool(
-            new NamespaceCachePool(memory), // default is MapStorage which is in-memory
-            new NamespaceCachePool(fs, new FilesystemStorage(path))
+    beforeAll(() => cache = new ChainedCachePool(
+            new NamespaceCachePool('default'),
+            new NamespaceCachePool('ns:1'), // default is MemoryStorage which is in-memory
+            new NamespaceCachePool('ns:2')
         )
     );
-    afterEach(() => {
-        cache = null
-        readdirSync(path, 'utf-8').forEach(file => unlinkSync(joinPath(path, file)));
+    afterAll(() => {
+        cache.clear();
+        cache = null;
     });
 
+    type TestObj = {first: string, last: string, age: number};
+
     it('Save to file system cache', () => {
-        const expected = {one: 1, two: 2, three: 300}
-        const value = cache.get(`${fs}.my-item`, (item:ItemInterface<{one: number, two: number, three: number}>) => expected);
-        expect(value.one).toEqual(expected.one);
-        expect(value.two).toEqual(expected.two);
-        expect(value.three).toEqual(expected.three);
+        const expected: TestObj = { first: 'John', last: 'Smith', age: 32};
+        const value = cache.get('default.jsmith', (item:ItemInterface<TestObj>) => expected);
+        expect(cache.has('default.jsmith')).toBeTrue();
+        const value2 = cache.get('ns:1.jsmith', (item:ItemInterface<TestObj>) => expected);
+        expect(cache.has('ns:1.jsmith')).toBeTrue();
+        cache.delete('default.jsmith');
+        expect(cache.has('default.jsmith')).toBeFalse();
+        expect(cache.has('ns:1.jsmith')).toBeTrue();
     });
 });
