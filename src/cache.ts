@@ -1,4 +1,4 @@
-import {MemoryStorage} from "./stroage/memory-storage";
+import {MemoryStorage} from "./storage/memory-storage";
 
 
 /**
