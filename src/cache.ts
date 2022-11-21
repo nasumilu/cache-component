@@ -1,84 +1,12 @@
 import {MemoryStorage} from "./storage/memory-storage";
 
 
-/**
- * The ItemInterface provides the necessary properties for the CachePool to successfully cache some value<T>.
- */
-export interface ItemInterface<T> {
-
-    /**
-     * A getter for the cached value.
-     */
-    get value(): T;
-
-    /**
-     * A setter for the value being cached.
-     * @param value
-     */
-    set value(value: T);
-
-    /**
-     * Indicates that the cache item has not expired.
-     *
-     */
-    get hit(): boolean;
-
-    /**
-     * Sets the Date for the cache item time-to-live (TTL).
-     *
-     * @param value If null item never expires; otherwise expires once the current time becomes greater
-     */
-    set expiresAt(value: Date | null);
-
-    /**
-     * Sets the number of seconds for the cache item time-to-live (TTL).
-     * @param value
-     */
-    set expiresAfter(value: number);
-
-    /**
-     * Indicates whether the item TTL has passed.
-     */
-    get isExpired(): boolean;
-
-}
-
-/**
- * Provides the default implementation of an ItemInterface by providing the minimum implementation requirements.
- */
-export class CacheItem<T> implements ItemInterface<T> {
-
-    /**
-     * The actual cached value.
-     * @private
-     */
-    value: T = null;
-    /**
-     * The item's TTL in seconds
-     * @private
-     */
-    expiry: number = Infinity;
-
-    hit = false;
-
-    set expiresAfter(value: number | null) {
-        this.expiry = (null != value) ? (new Date()).getTime() + value : Infinity;
-    }
-
-    set expiresAt(value: Date | null) {
-        this.expiry = (null != value) ? value.getTime() : Infinity;
-    }
-
-    get isExpired(): boolean {
-        return (new Date()).getTime() > this.expiry;
-    }
-
-}
+export type CacheItem<T> = { value: T; expiresAt: number; hit: boolean; };
 
 /**
  * A callback function used to obtain a value when the cache fails to hit.
  */
-export type CacheFn<T> = (item: ItemInterface<T>) => T;
+export type CacheFn<T> = (item: CacheItem<T>) => T;
 
 /**
  * The CachePoolInterface provides methods to fluently obtain a cached item(s) and encourage the use from turning into a
@@ -143,21 +71,24 @@ export class CachePool implements CachePoolInterface {
      * @param key The key used to store the CachedItem
      * @private
      */
-    #getItem<T>(key: string): ItemInterface<T> {
-        const cacheItem = new CacheItem<T>();
+    #getItem<T>(key: string): CacheItem<T> {
+        const cacheItem:CacheItem<T> = {value: undefined, expiresAt: Infinity, hit: false};
         const item = this.#storage.getItem(key);
         if( null != item) {
-            cacheItem.hit = true;
-            JSON.parse(this.#storage.getItem(key) ?? null, (key:string, value: any) => {
-                cacheItem[key] = value;
+            JSON.parse(item, (key:string, value: any) => {
+                if( key in cacheItem) {
+                    cacheItem[key] = value;
+                }
             });
         }
         return cacheItem;
     }
 
     get<T>(key: string, fn: CacheFn<T>): T {
+        let now = new Date().getTime();
         let item = this.#getItem<T>(key);
-        if (!item.hit || item.isExpired) {
+        if (!item.hit || (isFinite(item.expiresAt) && item.expiresAt < now)) {
+            item.hit = true;
             item.value = fn(item);
             this.#storage.setItem(key, JSON.stringify(item));
         }
