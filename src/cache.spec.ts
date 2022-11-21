@@ -10,41 +10,41 @@ describe('CacheItem Class', () => {
     it('Get an instance and check its default state (empty).', () => {
         expect(item).toBeTruthy();
         expect(item.value).toBeNull();
-        expect(item.hit).toBeTrue();
+        expect(item.isExpired).toBeFalse();
     });
 
     it('Set the item\'s value and check its equality and hit.', () => {
         const value = 'my-value';
         item.value = value;
         expect(item.value).toEqual(value);
-        expect(item.hit).toBeTrue();
+        expect(item.isExpired).toBeFalse();
     });
 
     it('Set the item\'s value and expires after and check that hit is false.', () => {
         const value = 'my-value';
         item.value = value;
         expect(item.value).toEqual(value);
-        expect(item.hit).toBeTrue();
+        expect(item.isExpired).toBeFalse();
         item.expiresAfter = -1;
-        expect(item.hit).toBeFalse();
+        expect(item.isExpired).toBeTrue();
     });
 
-    it('Set the item\'s value and expires after and check that hit is true.', () => {
+    it('Set the item\'s value and expires after and check that isExpired is true.', () => {
         const value = 'my-value';
         item.value = value;
         expect(item.value).toEqual(value);
-        expect(item.hit).toBeTrue();
+        expect(item.isExpired).toBeFalse();
         item.expiresAfter = 100;
-        expect(item.hit).toBeTrue();
+        expect(item.isExpired).toBeFalse();
     });
 
-    it('Set the item\'s value and expires at and check that hit is false.', () => {
+    it('Set the item\'s value and expires at and check that isExpired is false.', () => {
         const value = 'my-value';
         item.value = value;
         expect(item.value).toEqual(value);
-        expect(item.hit).toBeTrue();
-        item.expiresAt = new Date();
-        expect(item.hit).toBeFalse();
+        expect(item.isExpired).toBeFalse();
+        item.expiresAt = new Date('1968-01-01');
+        expect(item.isExpired).toBeTrue();
     });
 });
 
@@ -66,10 +66,14 @@ describe('NamespaceCachePool Class', () => {
     });
     it('Add an item to storage and set its expires in 5 sec. to verify that the cache hits.', () => {
         const value = cache.get(key, (item: ItemInterface<string>) => {
-            item.expiresAfter = 5;
+            item.expiresAfter = 5 * 60;
             return expected;
         });
         expect(value).toEqual(expected);
+        const value2 = cache.get(key, (item: ItemInterface<string>) => {
+            item.expiresAfter = 5 * 60;
+            return expected;
+        });
     });
     it('Add an item to storage and set its expires in -5 sec. to verify that the cache does not hits.', () => {
         const value = cache.get(key, (item: ItemInterface<string>) => {

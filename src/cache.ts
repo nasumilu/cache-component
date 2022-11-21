@@ -36,6 +36,11 @@ export interface ItemInterface<T> {
      */
     set expiresAfter(value: number);
 
+    /**
+     * Indicates whether the item TTL has passed.
+     */
+    get isExpired(): boolean;
+
 }
 
 /**
@@ -54,20 +59,18 @@ export class CacheItem<T> implements ItemInterface<T> {
      */
     expiry: number = Infinity;
 
+    hit = false;
+
     set expiresAfter(value: number | null) {
-        if (null != value) {
-            this.expiry = (new Date()).getTime() + value;
-        }
+        this.expiry = (null != value) ? (new Date()).getTime() + value : Infinity;
     }
 
     set expiresAt(value: Date | null) {
-        if (null !== value) {
-            this.expiry = value.getSeconds();
-        }
+        this.expiry = (null != value) ? value.getTime() : Infinity;
     }
 
-    get hit(): boolean {
-        return (new Date()).getTime() < this.expiry;
+    get isExpired(): boolean {
+        return (new Date()).getTime() > this.expiry;
     }
 
 }
@@ -134,33 +137,29 @@ export class CachePool implements CachePoolInterface {
         return this.#storage;
     }
 
-    /**
-     * Initializes a CacheItem and obtains its value from the callback function.
-     * @param key The key used to store the item for later retrieval.
-     * @param fn The callback used to obtain the cache items value.
-     * @private
-     */
-    #initItem<T>(key: string, fn: CacheFn<T>): CacheItem<T> {
-        const item = new CacheItem<T>();
-        item.value = fn(item)
-        this.#storage.setItem(key, JSON.stringify(item));
-        return item;
-    }
-
 
     /**
      * Gets a CachedItem for a specific key.
      * @param key The key used to store the CachedItem
      * @private
      */
-    #getItem?<T>(key: string): ItemInterface<T> {
-        return JSON.parse(this.#storage.getItem(key) ?? null) as ItemInterface<T>;
+    #getItem<T>(key: string): ItemInterface<T> {
+        const cacheItem = new CacheItem<T>();
+        const item = this.#storage.getItem(key);
+        if( null != item) {
+            cacheItem.hit = true;
+            JSON.parse(this.#storage.getItem(key) ?? null, (key:string, value: any) => {
+                cacheItem[key] = value;
+            });
+        }
+        return cacheItem;
     }
 
     get<T>(key: string, fn: CacheFn<T>): T {
         let item = this.#getItem<T>(key);
-        if (!item?.hit) {
-            item = this.#initItem<T>(key, fn);
+        if (!item.hit || item.isExpired) {
+            item.value = fn(item);
+            this.#storage.setItem(key, JSON.stringify(item));
         }
         return item.value;
     }
@@ -323,7 +322,7 @@ export class ChainedCachePool implements CachePoolInterface {
     has(key: string): boolean {
         let n, k: string;
         [n, k] = this.#getNamespaceAndKey(key);
-        return this.#findCachePoolByNamespace(n).has(k);
+        return this.#findCachePoolByNamespace(n)?.has(k) ?? false;
     }
 
 }
