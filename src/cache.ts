@@ -55,15 +55,11 @@ export class CacheItem<T> implements ItemInterface<T> {
     expiry: number = Infinity;
 
     set expiresAfter(value: number | null) {
-        if (null != value) {
-            this.expiry = (new Date()).getTime() + value;
-        }
+        this.expiry = (null != value) ? (new Date()).getTime() + value : Infinity;
     }
 
     set expiresAt(value: Date | null) {
-        if (null !== value) {
-            this.expiry = value.getSeconds();
-        }
+        this.expiry = (null != value) ? value.getTime() : Infinity;
     }
 
     get hit(): boolean {
@@ -154,7 +150,15 @@ export class CachePool implements CachePoolInterface {
      * @private
      */
     #getItem?<T>(key: string): ItemInterface<T> {
-        return JSON.parse(this.#storage.getItem(key) ?? null) as ItemInterface<T>;
+        const item = this.#storage.getItem(key);
+        if( null == item) {
+            return null;
+        }
+        const cacheItem = new CacheItem<T>();
+        JSON.parse(this.#storage.getItem(key) ?? null, (key:string, value: any) => {
+            cacheItem[key] = value;
+        });
+        return cacheItem;
     }
 
     get<T>(key: string, fn: CacheFn<T>): T {

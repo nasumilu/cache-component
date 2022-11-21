@@ -66,10 +66,14 @@ describe('NamespaceCachePool Class', () => {
     });
     it('Add an item to storage and set its expires in 5 sec. to verify that the cache hits.', () => {
         const value = cache.get(key, (item: ItemInterface<string>) => {
-            item.expiresAfter = 5;
+            item.expiresAfter = 5 * 60;
             return expected;
         });
         expect(value).toEqual(expected);
+        const value2 = cache.get(key, (item: ItemInterface<string>) => {
+            item.expiresAfter = 5 * 60;
+            return expected;
+        });
     });
     it('Add an item to storage and set its expires in -5 sec. to verify that the cache does not hits.', () => {
         const value = cache.get(key, (item: ItemInterface<string>) => {
