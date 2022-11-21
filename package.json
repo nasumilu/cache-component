@@ -1,5 +1,5 @@
 {
-  "name": "@nasumilu/cache-componenet",
+  "name": "@nasumilu/cache-component",
   "version": "1.0.0",
   "description": "A simple caching paradigm inspired by PSR-6.",
   "scripts": {
