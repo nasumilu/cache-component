@@ -130,6 +130,10 @@ export class CachePool implements CachePoolInterface {
         this.#storage = storage ?? new MemoryStorage();
     }
 
+    get storage(): Storage {
+        return this.#storage;
+    }
+
     /**
      * Initializes a CacheItem and obtains its value from the callback function.
      * @param key The key used to store the item for later retrieval.
@@ -240,6 +244,17 @@ export class NamespaceCachePool extends CachePool implements NamespaceCachePoolI
 
     has(key: string): boolean {
         return super.has(this.#getNamespaceKey(key));
+    }
+
+    clear(): void {
+        let keys: string[] = [];
+        for (let i = 0; i < this.storage.length; i++) {
+            const key = this.storage.key(i);
+            if (key?.includes(this.#namespace)) {
+                keys.push(key);
+            }
+        }
+        keys.forEach(key => this.storage.removeItem(key));
     }
 }
 
