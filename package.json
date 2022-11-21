@@ -2,6 +2,7 @@
   "name": "@nasumilu/cache-component",
   "version": "1.0.0",
   "description": "A simple caching paradigm inspired by PSR-6.",
+  "types": "module",
   "scripts": {
     "build": "tsc --project ./tsconfig.json",
     "test": "jasmine --config=jasmine.json",
