@@ -62,7 +62,7 @@ const sessionStorageValue = cache.get('session-storage.my-value', item => 'My Ca
 const appLocalValue = cache.get(
     'app-local.fetch-data', 
     async item => {
-        item.expiresAfter = 3600; // expire in 1 hour
+        item.expiresAt = (new Date()).getTime() + 3600 * 1000;
         return await fetch('https://some.com/api/endpoint').then(response => response.json());
     }
 );
