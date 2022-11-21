@@ -213,7 +213,7 @@ export class NamespaceCachePool extends CachePool implements NamespaceCachePoolI
  *  });
  *
  *  let dataFromLocalStorage = cache.get('local-storage.name', (item: ItemInterface<string>) => {
- *      item.expiresAfter = 60 * 60 * 24;
+ *      item.expiresAt = (new Date()).getTime() + 3600 * 1000;
  *      return 'Hello, World!';
  *  });
  * ```
@@ -230,7 +230,7 @@ export class ChainedCachePool implements CachePoolInterface {
         return key.split('.') as [string, string];
     }
 
-    #findCachePoolByNamespace?(namespace: string): CachePoolInterface {
+    getCachePool?(namespace: string): CachePoolInterface {
         return this.#cachePools.find(pool => pool.namespace === namespace)
     }
 
@@ -241,19 +241,19 @@ export class ChainedCachePool implements CachePoolInterface {
     delete<T>(key: string): void {
         let n, k: string;
         [n, k] = this.#getNamespaceAndKey(key);
-        this.#findCachePoolByNamespace(n)?.delete(k);
+        this.getCachePool(n)?.delete(k);
     }
 
     get<T>(key: string, fn: CacheFn<T>): T {
         let n, k: string;
         [n, k] = this.#getNamespaceAndKey(key);
-        return this.#findCachePoolByNamespace(n).get(k, fn);
+        return this.getCachePool(n).get(k, fn);
     }
 
     has(key: string): boolean {
         let n, k: string;
         [n, k] = this.#getNamespaceAndKey(key);
-        return this.#findCachePoolByNamespace(n)?.has(k) ?? false;
+        return this.getCachePool(n)?.has(k) ?? false;
     }
 
 }
