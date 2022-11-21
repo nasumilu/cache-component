@@ -3,7 +3,8 @@
     "target": "es2015",
     "module": "commonjs",
     "sourceMap": true,
-    "removeComments": true
+    "removeComments": true,
+    "outDir": "build"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "src/**/*.spec.ts"],
