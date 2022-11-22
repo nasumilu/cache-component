@@ -1,12 +1,28 @@
 import {MemoryStorage} from "./storage/memory-storage";
 
 
-export type CacheItem<T> = { value: T; expiresAt: number; hit: boolean; };
+/**
+ * The CacheItem type as a tuple with the first element required as the cached value and an optional second number which
+ * is the item's TTL as a Unix timestamp
+ *
+ * ## Examples
+ *
+ * ```
+ * ['foo-bar'] // cache the string 'foo-bar' infinitely
+ * ['foo-bar', 1669111468] // cache the string 'foo-bar' until Tue Nov 22 2022 10:04:28 GMT+0000
+ * ```
+ */
+export type CacheItem<T> = [T, number?];
 
 /**
- * A callback function used to obtain a value when the cache fails to hit.
+ * A callback function used to obtain a value when the cache false to hit.
+ * <br>
+ * This function is invoked when the following conditions exist:
+ *
+ * 1. When no No item exists in the cache
+ * 2. An item exists but its TTL has expired (now > TTL)
  */
-export type CacheFn<T> = (item: CacheItem<T>) => T;
+export type CacheFn<T> = () => CacheItem<T>;
 
 /**
  * The CachePoolInterface provides methods to fluently obtain a cached item(s) and encourage the use from turning into a
@@ -15,7 +31,13 @@ export type CacheFn<T> = (item: CacheItem<T>) => T;
 export interface CachePoolInterface {
 
     /**
-     * Get the cached item by the argument `key` if no cache it, obtain and cache the item from the `CacheFn`
+     * Get the cached item by the argument `key` if no cache it, obtain and cache the item using the `CacheFn<T>` function.
+     *
+     * ### Example
+     * ```
+     * cache.get<FooBar>('foo-bar', () => [{foo: 'bar'}];
+     * cache.get<FooBar>('foo-bar', () => [{foo: 'bar'}, 1669111468];
+     * ```
      * @param key The cached item's key.
      * @param fn Call function if cache fails to hit.
      */
@@ -51,18 +73,18 @@ export class CachePool implements CachePoolInterface {
      * Storage used to cache items.
      * @private
      */
-    readonly #storage: Storage;
+    private readonly _storage: Storage;
 
     /**
      * Constructs a CachePool
      * @param storage
      */
     constructor(storage?: Storage) {
-        this.#storage = storage ?? new MemoryStorage();
+        this._storage = storage ?? new MemoryStorage();
     }
 
     get storage(): Storage {
-        return this.#storage;
+        return this._storage;
     }
 
 
@@ -71,40 +93,34 @@ export class CachePool implements CachePoolInterface {
      * @param key The key used to store the CachedItem
      * @private
      */
-    #getItem<T>(key: string): CacheItem<T> {
-        const cacheItem:CacheItem<T> = {value: undefined, expiresAt: Infinity, hit: false};
-        const item = this.#storage.getItem(key);
-        if( null != item) {
-            JSON.parse(item, (key:string, value: any) => {
-                if( key in cacheItem) {
-                    cacheItem[key] = value;
-                }
-            });
+    private getItem<T>(key: string): CacheItem<T> | null{
+        let item = this._storage.getItem(key);
+        if (null == item) {
+            return null;
         }
-        return cacheItem;
+        return JSON.parse(item) as CacheItem<T>;
     }
 
     get<T>(key: string, fn: CacheFn<T>): T {
+        let item = this.getItem<T>(key);
         let now = new Date().getTime();
-        let item = this.#getItem<T>(key);
-        if (!item.hit || (isFinite(item.expiresAt) && item.expiresAt < now)) {
-            item.hit = true;
-            item.value = fn(item);
-            this.#storage.setItem(key, JSON.stringify(item));
+        if (null === item || (item[1] ?? Infinity) < now) {
+            item = fn();
+            this._storage.setItem(key, JSON.stringify(item));
         }
-        return item.value;
+        return item[0];
     }
 
     delete<T>(key: string): void {
-        this.#storage.removeItem(key);
+        this._storage.removeItem(key);
     }
 
     has(key: string): boolean {
-        return null != this.#storage.getItem(key);
+        return null != this._storage.getItem(key);
     }
 
     clear(): void {
-        this.#storage.clear();
+        this._storage.clear();
     }
 }
 
@@ -144,7 +160,7 @@ export class NamespaceCachePool extends CachePool implements NamespaceCachePoolI
      * The cache pool's namespace
      * @private
      */
-    readonly #namespace: string;
+    private readonly _namespace: string;
 
     /**
      * Constructs a NamedCachePool
@@ -153,34 +169,34 @@ export class NamespaceCachePool extends CachePool implements NamespaceCachePoolI
      */
     constructor(namespace: string, storage?: Storage) {
         super(storage ?? new MemoryStorage());
-        this.#namespace = namespace;
+        this._namespace = namespace;
     }
 
     get namespace(): string {
-        return this.#namespace;
+        return this._namespace;
     }
 
-    #getNamespaceKey(key: string): string {
-        return `${this.#namespace}.${key}`;
+    private getNamespaceKey(key: string): string {
+        return `${this._namespace}.${key}`;
     }
 
-    get<T>(key: string, fn: CacheFn<T>): T {
-        return super.get(this.#getNamespaceKey(key), fn);
+    override get<T>(key: string, fn: CacheFn<T>): T {
+        return super.get(this.getNamespaceKey(key), fn);
     }
 
-    delete<T>(key: string): void {
-        super.delete(this.#getNamespaceKey(key));
+    override delete<T>(key: string): void {
+        super.delete(this.getNamespaceKey(key));
     }
 
-    has(key: string): boolean {
-        return super.has(this.#getNamespaceKey(key));
+    override has(key: string): boolean {
+        return super.has(this.getNamespaceKey(key));
     }
 
-    clear(): void {
+    override clear(): void {
         let keys: string[] = [];
         for (let i = 0; i < this.storage.length; i++) {
             const key = this.storage.key(i);
-            if (key?.includes(this.#namespace)) {
+            if (key?.includes(this._namespace)) {
                 keys.push(key);
             }
         }
@@ -220,40 +236,48 @@ export class NamespaceCachePool extends CachePool implements NamespaceCachePoolI
  */
 export class ChainedCachePool implements CachePoolInterface {
 
-    readonly #cachePools: NamespaceCachePool[];
+    private readonly _cachePools: NamespaceCachePool[];
 
     constructor(...cachePools: NamespaceCachePool[]) {
-        this.#cachePools = cachePools;
+        this._cachePools = cachePools;
     }
 
-    #getNamespaceAndKey(key: string): [string, string] {
+    private getNamespaceAndKey(key: string): [string, string] {
         return key.split('.') as [string, string];
     }
 
-    getCachePool?(namespace: string): CachePoolInterface {
-        return this.#cachePools.find(pool => pool.namespace === namespace)
+    getCachePool(namespace: string): CachePoolInterface | null {
+        return (this._cachePools.find(pool => pool.namespace === namespace) as CachePoolInterface)
     }
 
     clear(): void {
-        this.#cachePools.forEach(pool => pool.clear());
+        this._cachePools.forEach(pool => pool.clear());
     }
 
     delete<T>(key: string): void {
         let n, k: string;
-        [n, k] = this.#getNamespaceAndKey(key);
-        this.getCachePool(n)?.delete(k);
+        [n, k] = this.getNamespaceAndKey(key);
+        const pool = this.getCachePool(n);
+        if(null !== pool) {
+            pool.delete(k);
+        }
     }
 
     get<T>(key: string, fn: CacheFn<T>): T {
         let n, k: string;
-        [n, k] = this.#getNamespaceAndKey(key);
-        return this.getCachePool(n).get(k, fn);
+        [n, k] = this.getNamespaceAndKey(key);
+        const pool = this.getCachePool(n);
+        if(null === pool) {
+            throw new Error(`Unknown cache pool for namespace ${n}!`);
+        }
+        return pool.get(k, fn);
     }
 
     has(key: string): boolean {
         let n, k: string;
-        [n, k] = this.#getNamespaceAndKey(key);
-        return this.getCachePool(n)?.has(k) ?? false;
+        [n, k] = this.getNamespaceAndKey(key);
+        const pool = this.getCachePool(n);
+        return pool !== null && pool.has(k);
     }
 
 }
