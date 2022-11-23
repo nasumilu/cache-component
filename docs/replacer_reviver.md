@@ -2,7 +2,7 @@
 
 By default, values are (un)marshalled using the built-in `JSON.stringify` and `JSON.parse` static members. However, in 
 many cases this built in method may marshal the object but not correctly unmarshall it into the appropriate instances.
-For these more complex objects it is necessary to use a replacer and a reviver callback functions to handle this situation. 
+For these complex objects it is necessary to use a replacer and a reviver callback function(s). 
 
 The responsibility of a replacer function (`ReplacerFn<T>`) is to marshal an object to a string which is later 
 unmarshalled using the reviver function (`ReviverFn<T>`).
