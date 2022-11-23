@@ -4,49 +4,56 @@ This was inspired by [Symfony Cache Component](https://symfony.com/doc/current/c
 Often caching turns into some global registry, this paradigm, utilizing this higher level functionality which 
 discourages such erroneous practice.
 
-
 ## Usage
 
 ### CachePool
-```javascript
-import {CachePool} from 'cache';
-
-const cache = new CachePool(); // default storage is in-memory
-
-const value = cache.get('my-value', (item) => {
-    return 'My Cached Value';
-});
-```
 
 The default `Storage` is in-memory using the `MemoryStorage` class but any class which implements `Storage` may be
-used when constructing the cache pool. For local storage use, 
+used when constructing the cache pool.
 
-```javascript
+
+```typescript
+import {CachePool} from 'cache';
+
+const cache = new CachePool(); // default storage is in-memory using the MemoryStorage class
+
+const value = cache.get('my-value', 'My Cached Value');
+```
+
+To use one of the native web browser storage, simply pass either the `window.localStorage` or `window.sessionStorage`
+when constructing a `CachePool`. 
+
+> **IMPORTANT**
+> 
+> The `cache.clear()` will remove **ALL** cached values in the underlying `Storage`. So if the application is using 
+> `window.localStorage` or `window.sessionStorage` outside of this API those value will also be deleted. To avoid this 
+> consider using the `NamespaceCachePool`.
+
+```typescript
 const cache = new CachePool(window.localStorage);
 ```
 
-It is important to not that the `cache.clear()` will remove **ALL** cached values found in the storage. So if the 
-application is using `localStorage` outside of this API those value will also be lost. To avoid this consider using
-the `NamespaceCachePool`.
-
 ### NamespaceCachePool
 
-```javascript
+The namespace cache pool class prefixes all keys with a namespace. So the actual item, in the example below, is stored
+using the key `default.my-value`. The cache namespace is _automagically_ prefix for you, just do things as if you where
+using a regular `CachePool`. The important thing is when invoking the `clear` method on an instance of `NamespaceCachePool`
+only the items containing that prefixed are removed.
+
+```typescript
 import {NamespaceCachePool} from 'cache';
 
-const cache = new NamespaceCachePool('default'); // default storage is in-memory
-
-const value = cache.get('my-value', (item) => {
-    return 'My Cached Value';
-});
+const cache = new NamespaceCachePool('default', window.localStorage);
+const value = cache.get('my-value', 'My Cached Value');
 ```
-
-The namespace cache pool class prefixes all keys with a namespace. So the actual item is stored using the key 
-`default.my-value`, but you never need to be concerned as the prefixing is automagically done.
 
 ### ChainedCachePool
 
-```javascript
+The chained cache pool may have 1 or more `NamespaceCachePool` objects. Unlike the above examples, the namespace is 
+necessary. It is used to identify the appropriate cache pool, so key **MUST** be prefixed with the namespace of the 
+intended cache pool target.
+
+```typescript
 import { ChainedCachePool, NamespaceCachePool } from 'cache';
 
 const cache = new ChainedCachePool(
@@ -59,14 +66,11 @@ const cache = new ChainedCachePool(
 const defaultValue = cache.get('default.my-value', item => 'My Cached Value');
 const localStorageValue = cache.get('local-storage.my-value', item => 'My Cached Value');
 const sessionStorageValue = cache.get('session-storage.my-value', item => 'My Cached Value');
-const appLocalValue = cache.get(
+const endpointData = cache.get(
     'app-local.fetch-data', 
-    async item => {
-        item.expiresAt = (new Date()).getTime() + 3600 * 1000;
-        return await fetch('https://some.com/api/endpoint').then(response => response.json());
-    }
+    async item => await fetch('https://some.com/api/endpoint').then(response => response.json())
 );
 ```
 
-The chained cache pool may have 1 or more `NamespaceCachePool` objects. In this instance the key **MUST** be prefixed
-with the namespace of the target cache pool.
+- [Using replacer & reviver](./docs/replacer_reviver.md)
+- [Using time-to-live (TTL)](./docs/ttl.md)

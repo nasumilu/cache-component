@@ -1,71 +1,34 @@
 import {MemoryStorage} from "./storage/memory-storage";
-
-
-/**
- * The CacheItem type as a tuple with the first element required as the cached value and an optional second number which
- * is the item's TTL as a Unix timestamp
- *
- * ## Examples
- *
- * ```
- * ['foo-bar'] // cache the string 'foo-bar' infinitely
- * ['foo-bar', 1669111468] // cache the string 'foo-bar' until Tue Nov 22 2022 10:04:28 GMT+0000
- * ```
- */
-export type CacheItem<T> = [T, number?];
-
-/**
- * A callback function used to obtain a value when the cache false to hit.
- * <br>
- * This function is invoked when the following conditions exist:
- *
- * 1. When no No item exists in the cache
- * 2. An item exists but its TTL has expired (now > TTL)
- */
-export type CacheFn<T> = () => CacheItem<T>;
-
-/**
- * The CachePoolInterface provides methods to fluently obtain a cached item(s) and encourage the use from turning into a
- * global registry of conflicts and spaghetti code.
- */
-export interface CachePoolInterface {
-
-    /**
-     * Get the cached item by the argument `key` if no cache it, obtain and cache the item using the `CacheFn<T>` function.
-     *
-     * ### Example
-     * ```
-     * cache.get<FooBar>('foo-bar', () => [{foo: 'bar'}];
-     * cache.get<FooBar>('foo-bar', () => [{foo: 'bar'}, 1669111468];
-     * ```
-     * @param key The cached item's key.
-     * @param fn Call function if cache fails to hit.
-     */
-    get<T>(key: string, fn: CacheFn<T>): T;
-
-    /**
-     * Delete the cached item from storage
-     *
-     * @param key
-     */
-    delete<T>(key: string): void;
-
-    /**
-     * Indicates that a cache item exists for a key.
-     *
-     *  **IMPORTANT** this does not verify the TTL just that an item exists for a specific key.
-     * @param key
-     */
-    has(key: string): boolean;
-
-    /**
-     * Clear all items cached by this pool
-     */
-    clear(): void;
-}
+import {CachePoolInterface, NamespaceCachePoolInterface, ReplacerFn, ReviverFn, ValueFn} from "./types";
 
 /**
  * A default CachePoolInterface implementation.
+ *
+ * This class provides the basic (un)marshalling of an item to/from Storage using a replacer and reviver function. The
+ * replacer function when not provided, utilizes the `JSON.stringify`, likewise the reviver by default is the
+ * `JSON.parse` function.
+ *
+ * ### Usage
+ * ```
+ * const cache = new CachePool(); // defaults to MemoryStorage
+ * cache.get<Person>(
+ *      'my-obj',
+ *      () => ({name: 'John Smith', age: 32 })
+ * )
+ * ```
+ * With a replacer and reviver
+ * ```
+ * cache.get<Person>(
+ *      'my-obj',
+ *      () => ({name: 'John Smith', age: 32 }),
+ *      (p: Person) => JSON.stringify([p.name, p.age]),
+ *      (str: string) => {
+ *          const unmarshal = JSON.parse(str);
+ *          return {name: unmarshal[0], age: unmarshal[1]}
+ *      },
+ *      new Date('2022-12-31')
+ * )
+ * ```
  */
 export class CachePool implements CachePoolInterface {
 
@@ -73,66 +36,45 @@ export class CachePool implements CachePoolInterface {
      * Storage used to cache items.
      * @private
      */
-    private readonly _storage: Storage;
+    readonly #storage: Storage;
 
     /**
      * Constructs a CachePool
      * @param storage
      */
     constructor(storage?: Storage) {
-        this._storage = storage ?? new MemoryStorage();
+        this.#storage = storage ?? new MemoryStorage();
     }
 
     get storage(): Storage {
-        return this._storage;
+        return this.#storage;
     }
 
-
-    /**
-     * Gets a CachedItem for a specific key.
-     * @param key The key used to store the CachedItem
-     * @private
-     */
-    private getItem<T>(key: string): CacheItem<T> | null{
-        let item = this._storage.getItem(key);
-        if (null == item) {
-            return null;
+    get<T>(key: string, value: ValueFn<T> | T, ttl?: number | Date, replacer?: ReplacerFn<T>, reviver?: ReviverFn<T>): T {
+        let item = this.#storage.getItem(key);
+        const now = (new Date()).getTime();
+        ttl = ttl instanceof Date ? ttl.getTime() : ttl;
+        if (null === item || (ttl ?? Infinity) < now) {
+            value = (value instanceof Function) ? value() : value;
+            const replacerFn = replacer != null ? replacer : JSON.stringify;
+            this.#storage.setItem(key, replacerFn(value));
+            return value;
         }
-        return JSON.parse(item) as CacheItem<T>;
-    }
-
-    get<T>(key: string, fn: CacheFn<T>): T {
-        let item = this.getItem<T>(key);
-        let now = new Date().getTime();
-        if (null === item || (item[1] ?? Infinity) < now) {
-            item = fn();
-            this._storage.setItem(key, JSON.stringify(item));
-        }
-        return item[0];
+        const reviverFn = (null != reviver) ? reviver : JSON.parse;
+        return reviverFn(item);
     }
 
     delete<T>(key: string): void {
-        this._storage.removeItem(key);
+        this.#storage.removeItem(key);
     }
 
     has(key: string): boolean {
-        return null != this._storage.getItem(key);
+        return null != this.#storage.getItem(key);
     }
 
     clear(): void {
-        this._storage.clear();
+        this.#storage.clear();
     }
-}
-
-/**
- * The NamespaceCachePoolInterface defines a CachePoolInterface which prefixes all cached items with a namespace value.
- */
-export interface NamespaceCachePoolInterface extends CachePoolInterface {
-
-    /**
-     * Getter for the cache pool's namespace.
-     */
-    get namespace(): string
 }
 
 /**
@@ -160,7 +102,7 @@ export class NamespaceCachePool extends CachePool implements NamespaceCachePoolI
      * The cache pool's namespace
      * @private
      */
-    private readonly _namespace: string;
+    readonly #namespace: string;
 
     /**
      * Constructs a NamedCachePool
@@ -169,19 +111,19 @@ export class NamespaceCachePool extends CachePool implements NamespaceCachePoolI
      */
     constructor(namespace: string, storage?: Storage) {
         super(storage ?? new MemoryStorage());
-        this._namespace = namespace;
+        this.#namespace = namespace;
     }
 
     get namespace(): string {
-        return this._namespace;
+        return this.#namespace;
     }
 
     private getNamespaceKey(key: string): string {
-        return `${this._namespace}.${key}`;
+        return `${this.#namespace}.${key}`;
     }
 
-    override get<T>(key: string, fn: CacheFn<T>): T {
-        return super.get(this.getNamespaceKey(key), fn);
+    override get<T>(key: string, value: ValueFn<T> | T, ttl?: number | Date, replacer?: ReplacerFn<T>, reviver?: ReviverFn<T>): T {
+        return super.get(this.getNamespaceKey(key), value, ttl, replacer, reviver);
     }
 
     override delete<T>(key: string): void {
@@ -196,7 +138,7 @@ export class NamespaceCachePool extends CachePool implements NamespaceCachePoolI
         let keys: string[] = [];
         for (let i = 0; i < this.storage.length; i++) {
             const key = this.storage.key(i);
-            if (key?.includes(this._namespace)) {
+            if (key?.includes(this.#namespace)) {
                 keys.push(key);
             }
         }
@@ -236,10 +178,10 @@ export class NamespaceCachePool extends CachePool implements NamespaceCachePoolI
  */
 export class ChainedCachePool implements CachePoolInterface {
 
-    private readonly _cachePools: NamespaceCachePool[];
+    readonly #cachePools: NamespaceCachePool[];
 
     constructor(...cachePools: NamespaceCachePool[]) {
-        this._cachePools = cachePools;
+        this.#cachePools = cachePools;
     }
 
     private getNamespaceAndKey(key: string): [string, string] {
@@ -247,11 +189,11 @@ export class ChainedCachePool implements CachePoolInterface {
     }
 
     getCachePool(namespace: string): CachePoolInterface | null {
-        return (this._cachePools.find(pool => pool.namespace === namespace) as CachePoolInterface)
+        return (this.#cachePools.find(pool => pool.namespace === namespace) as CachePoolInterface)
     }
 
     clear(): void {
-        this._cachePools.forEach(pool => pool.clear());
+        this.#cachePools.forEach(pool => pool.clear());
     }
 
     delete<T>(key: string): void {
@@ -263,14 +205,14 @@ export class ChainedCachePool implements CachePoolInterface {
         }
     }
 
-    get<T>(key: string, fn: CacheFn<T>): T {
+    get<T>(key: string, value: ValueFn<T> | T, ttl?: number | Date, replacer?: ReplacerFn<T>, reviver?: ReviverFn<T>): T {
         let n, k: string;
         [n, k] = this.getNamespaceAndKey(key);
         const pool = this.getCachePool(n);
         if(null === pool) {
             throw new Error(`Unknown cache pool for namespace ${n}!`);
         }
-        return pool.get(k, fn);
+        return pool.get(k, value, ttl, replacer, reviver);
     }
 
     has(key: string): boolean {
